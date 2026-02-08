@@ -1,0 +1,27 @@
+[package]
+name = "slint-baseview"
+version = "0.0.1"
+edition = "2024"
+
+[features]
+default = ["femtovg", "skia", "software"]
+femtovg = ["dep:glutin", "dep:i-slint-renderer-femtovg"]
+skia = ["dep:i-slint-renderer-skia"]
+software = ["dep:bytemuck", "dep:i-slint-renderer-software", "dep:softbuffer"]
+
+[dependencies]
+baseview = { git = "https://github.com/lbulla/baseview.git", branch = "f/tuning" }
+bytemuck = { version = "1.25.0", optional = true }
+cfg-if = "1.0.4"
+crossbeam-channel = "0.5.15"
+glutin = { version = "0.32.3", optional = true }
+i-slint-common = "^1.13.1"
+i-slint-core = "^1.13.1"
+i-slint-renderer-femtovg = { version = "^1.13.1", features = [
+    "opengl",
+], optional = true }
+i-slint-renderer-skia = { version = "^1.13.1", optional = true }
+i-slint-renderer-software = { version = "^1.13.1", optional = true }
+keyboard-types = { version = "0.6.1", default-features = false }
+raw-window-handle = "0.6.2"
+softbuffer = { version = "0.4.8", optional = true }
