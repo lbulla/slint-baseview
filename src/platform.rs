@@ -1,4 +1,9 @@
-use i_slint_core::{api::PlatformError, platform::Platform, window::WindowAdapter};
+use baseview::{copy_to_clipboard, paste_from_clipboard};
+use i_slint_core::{
+    api::PlatformError,
+    platform::{Clipboard, Platform},
+    window::WindowAdapter,
+};
 use std::{cell::RefCell, rc::Rc};
 
 use crate::SbWindowAdapter;
@@ -21,5 +26,21 @@ impl Platform for SbPlatform {
             Some(a) => Ok(a as _),
             None => Err(PlatformError::Other("No `WINDOW_ADAPTER_INNER`".into())),
         })
+    }
+
+    fn set_clipboard_text(&self, text: &str, clipboard: Clipboard) {
+        if let Err(err) = copy_to_clipboard(text, clipboard == Clipboard::SelectionClipboard) {
+            eprintln!("Failed to set clipboard text: {err}");
+        }
+    }
+
+    fn clipboard_text(&self, clipboard: Clipboard) -> Option<String> {
+        match paste_from_clipboard(clipboard == Clipboard::SelectionClipboard) {
+            Ok(text) => Some(text),
+            Err(err) => {
+                eprintln!("Failed to get clipboard text: {err}");
+                None
+            }
+        }
     }
 }

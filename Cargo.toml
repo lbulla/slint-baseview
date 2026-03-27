@@ -10,7 +10,7 @@ skia = ["dep:i-slint-renderer-skia"]
 software = ["dep:bytemuck", "dep:i-slint-renderer-software", "dep:softbuffer"]
 
 [dependencies]
-baseview = { git = "https://github.com/lbulla/baseview.git", rev = "0b1312316a5faaa273b148ed9e496eb17ac4eda1" }
+baseview = { git = "https://github.com/lbulla/baseview.git", rev = "00444c1039fc3ab0ed265bf055e84a324baf1361" }
 bitflags = "2.10.0"
 bytemuck = { version = "1.25.0", optional = true }
 cfg-if = "1.0.4"
