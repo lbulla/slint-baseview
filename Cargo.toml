@@ -8,6 +8,7 @@ default = ["femtovg", "skia", "software"]
 femtovg = ["dep:glutin", "dep:i-slint-renderer-femtovg"]
 skia = ["dep:i-slint-renderer-skia"]
 software = ["dep:bytemuck", "dep:i-slint-renderer-software", "dep:softbuffer"]
+native-menu-bar = []
 
 [dependencies]
 baseview = { git = "https://github.com/lbulla/baseview.git", rev = "00444c1039fc3ab0ed265bf055e84a324baf1361" }
@@ -17,16 +18,24 @@ cfg-if = "1.0.4"
 crossbeam-channel = "0.5.15"
 glutin = { version = "0.32.3", optional = true }
 i-slint-common = "1.15.1"
-i-slint-core = "1.15.1"
+i-slint-core = { version = "1.15.1", features = ["raw-window-handle-06"] }
 i-slint-renderer-femtovg = { version = "1.15.1", features = [
     "opengl",
 ], optional = true }
 i-slint-renderer-skia = { version = "1.15.1", optional = true }
 i-slint-renderer-software = { version = "1.15.1", optional = true }
 keyboard-types = { version = "0.6.1", default-features = false }
+muda = "0.17.1"
 raw-window-handle = "0.6.2"
 serde = { version = "1.0.228", features = ["derive"] }
 softbuffer = { version = "0.4.8", optional = true }
+strum = { version = "0.28.0", features = ["derive"] }
+vtable = "0.3.0"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2-app-kit = { git = "https://github.com/madsmtm/objc2.git", rev = "0c62eb96d7a3d9512f19b2c49d9dd18c8bbbb6e0", features = [
+    "NSView",
+] }
 
 # TODO: Replace it in `i-slint-renderer-skia`
 [patch.crates-io]

@@ -5,14 +5,20 @@ use i_slint_core::{
     InternalToken,
     api::{LogicalPosition, LogicalSize, PhysicalSize, Window},
     items::PointerEventButton,
+    menus::MenuVTable,
     platform::{WindowEvent, update_timers_and_animations},
     renderer::Renderer,
     window::{InputMethodRequest, WindowAdapter, WindowAdapterInternal},
 };
 use keyboard_types::{KeyState, Modifiers};
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, rc::Rc, str::FromStr};
+use vtable::VRc;
 
-use crate::{SbLogicalSize, SbRendererType, renderer::SbRendererAdapter};
+use crate::{
+    SbLogicalSize, SbRendererType,
+    muda::{ID_SEP, MudaAdapter, MudaType},
+    renderer::SbRendererAdapter,
+};
 
 // ---------- SbWindowAdapter ---------- //
 
@@ -20,6 +26,8 @@ pub struct SbWindowAdapter {
     inner: RefCell<SbWindowAdapterInner>,
     renderer_adapter: Box<dyn SbRendererAdapter>,
     window: Window,
+    window_handle: raw_window_handle::RawWindowHandle,
+    display_handle: raw_window_handle::RawDisplayHandle,
 }
 
 impl SbWindowAdapter {
@@ -30,6 +38,8 @@ impl SbWindowAdapter {
         system_scale_factor: Option<f64>,
         user_scale_factor: f64,
         renderer_type: SbRendererType,
+        window_handle: raw_window_handle::RawWindowHandle,
+        display_handle: raw_window_handle::RawDisplayHandle,
     ) -> Rc<Self> {
         Rc::new_cyclic(|this| {
             let window = Window::new(this.clone() as _);
@@ -48,9 +58,14 @@ impl SbWindowAdapter {
                     cursor: None,
                     flags: Flags::empty(),
                     pending_user_scale_factor: None,
+
+                    muda_menubar: None,
+                    muda_context: None,
                 }),
                 renderer_adapter: renderer_type.create_adapter(),
                 window,
+                window_handle,
+                display_handle,
             }
         })
     }
@@ -345,6 +360,24 @@ impl SbWindowAdapter {
         let (cursor, focus, size) = {
             let mut inner = self.inner.borrow_mut();
 
+            for menu_event in muda::MenuEvent::receiver().try_iter() {
+                let (muda_type, menu_index) = menu_event.id().0.split_once(ID_SEP).unwrap();
+                let menu_index = menu_index.parse().unwrap();
+
+                match MudaType::from_str(muda_type).unwrap() {
+                    MudaType::Menubar => {
+                        if let Some(muda_menubar) = inner.muda_menubar.as_ref() {
+                            muda_menubar.invoke(menu_index);
+                        }
+                    }
+                    MudaType::Context => {
+                        if let Some(muda_context) = inner.muda_context.as_ref() {
+                            muda_context.invoke(menu_index);
+                        }
+                    }
+                }
+            }
+
             (
                 inner.cursor.take(),
                 inner.contains_remove_flags(Flags::FOCUS),
@@ -425,6 +458,26 @@ impl WindowAdapter for SbWindowAdapter {
     fn internal(&self, _: InternalToken) -> Option<&dyn WindowAdapterInternal> {
         Some(self)
     }
+
+    fn window_handle_06(
+        &self,
+    ) -> Result<raw_window_handle::WindowHandle<'_>, raw_window_handle::HandleError> {
+        unsafe {
+            Ok(raw_window_handle::WindowHandle::borrow_raw(
+                self.window_handle,
+            ))
+        }
+    }
+
+    fn display_handle_06(
+        &self,
+    ) -> Result<raw_window_handle::DisplayHandle<'_>, raw_window_handle::HandleError> {
+        unsafe {
+            Ok(raw_window_handle::DisplayHandle::borrow_raw(
+                self.display_handle,
+            ))
+        }
+    }
 }
 
 // TODO: impl complete trait.
@@ -439,6 +492,38 @@ impl WindowAdapterInternal for SbWindowAdapter {
             _ => (),
         }
     }
+
+    #[cfg(feature = "native-menu-bar")]
+    fn supports_native_menu_bar(&self) -> bool {
+        true
+    }
+
+    #[cfg(feature = "native-menu-bar")]
+    fn setup_menubar(&self, menubar: VRc<MenuVTable>) {
+        let mut inner = self.inner.borrow_mut();
+        // On Windows, we must destroy the muda menu before re-creating a new one.
+        drop(inner.muda_menubar.take());
+        inner
+            .muda_menubar
+            .replace(MudaAdapter::setup(menubar, MudaType::Menubar));
+    }
+
+    fn show_native_popup_menu(
+        &self,
+        context_menu_item: VRc<MenuVTable>,
+        position: LogicalPosition,
+    ) -> bool {
+        let mut inner = self.inner.borrow_mut();
+        // On Windows, we must destroy the muda menu before re-creating a new one.
+        drop(inner.muda_context.take());
+        inner.muda_context = MudaAdapter::show_context_menu(
+            context_menu_item,
+            self.window_handle,
+            position,
+            inner.user_scale_factor,
+        );
+        inner.muda_context.is_some()
+    }
 }
 
 // ---------- SbWindowAdapter ---------- //
@@ -452,6 +537,9 @@ struct SbWindowAdapterInner {
     cursor: Option<i_slint_core::items::MouseCursor>,
     flags: Flags,
     pending_user_scale_factor: Option<f64>,
+
+    muda_menubar: Option<MudaAdapter>,
+    muda_context: Option<MudaAdapter>,
 }
 
 impl SbWindowAdapterInner {

@@ -1,6 +1,6 @@
 use baseview::{Event, EventStatus, WindowOpenOptions, WindowScalePolicy};
 use i_slint_core::platform::set_platform;
-use raw_window_handle::{HandleError, HasWindowHandle};
+use raw_window_handle::{HandleError, HasDisplayHandle, HasWindowHandle};
 use std::rc::Rc;
 
 use crate::{Receiver, SbLogicalSize, SbRendererType, SbWindowAdapter, platform::SbPlatform};
@@ -45,6 +45,8 @@ impl SbWindow {
                     system_scale_factor,
                     user_scale_factor,
                     renderer_type,
+                    window.window_handle().unwrap().as_raw(),
+                    window.display_handle().unwrap().as_raw(),
                 );
                 SbPlatform::WINDOW_ADAPTER.with_borrow_mut(|a| a.replace(window_adapter.clone()));
                 window_adapter.set_window(window);
