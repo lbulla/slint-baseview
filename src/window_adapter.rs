@@ -2,11 +2,12 @@ use baseview::{Event, EventStatus, MouseButton, MouseEvent, ScrollDelta};
 use bitflags::bitflags;
 use i_slint_common::for_each_special_keys;
 use i_slint_core::{
+    InternalToken,
     api::{LogicalPosition, LogicalSize, PhysicalSize, Window},
     items::PointerEventButton,
     platform::{WindowEvent, update_timers_and_animations},
     renderer::Renderer,
-    window::WindowAdapter,
+    window::{InputMethodRequest, WindowAdapter, WindowAdapterInternal},
 };
 use keyboard_types::{KeyState, Modifiers};
 use std::{cell::RefCell, rc::Rc};
@@ -43,8 +44,10 @@ impl SbWindowAdapter {
                     system_scale_factor,
                     user_scale_factor,
                     mouse_pos: LogicalPosition::new(0.0, 0.0),
-                    pending_user_scale_factor: None,
+
+                    cursor: None,
                     flags: Flags::empty(),
+                    pending_user_scale_factor: None,
                 }),
                 renderer_adapter: renderer_type.create_adapter(),
                 window,
@@ -79,7 +82,7 @@ impl SbWindowAdapter {
     // ---------- Events ---------- //
 
     pub(crate) fn on_frame(&self, window: &mut baseview::Window) {
-        self.handle_pending_user_scale_factor(window);
+        self.process_messages(window);
         update_timers_and_animations();
 
         if !self.inner.borrow_mut().contains_remove_flags(Flags::REDRAW) {
@@ -263,7 +266,7 @@ impl SbWindowAdapter {
             },
         }
 
-        self.handle_pending_user_scale_factor(window);
+        self.process_messages(window);
         EventStatus::Captured
     }
 
@@ -277,6 +280,41 @@ impl SbWindowAdapter {
             MouseButton::Back => PointerEventButton::Back,
             MouseButton::Forward => PointerEventButton::Forward,
             MouseButton::Other(_) => PointerEventButton::Other,
+        }
+    }
+
+    fn convert_cursor(cursor: i_slint_core::items::MouseCursor) -> baseview::MouseCursor {
+        match cursor {
+            i_slint_core::items::MouseCursor::Crosshair => baseview::MouseCursor::Crosshair,
+            i_slint_core::items::MouseCursor::Default => baseview::MouseCursor::Default,
+            i_slint_core::items::MouseCursor::None => baseview::MouseCursor::Hidden,
+            i_slint_core::items::MouseCursor::Help => baseview::MouseCursor::Help,
+            i_slint_core::items::MouseCursor::Pointer => baseview::MouseCursor::Ptr,
+            i_slint_core::items::MouseCursor::Progress => baseview::MouseCursor::Working,
+            i_slint_core::items::MouseCursor::Wait => baseview::MouseCursor::Working,
+            i_slint_core::items::MouseCursor::Text => baseview::MouseCursor::Text,
+            i_slint_core::items::MouseCursor::Alias => baseview::MouseCursor::Alias,
+            i_slint_core::items::MouseCursor::Copy => baseview::MouseCursor::Copy,
+            i_slint_core::items::MouseCursor::Move => baseview::MouseCursor::Move,
+            i_slint_core::items::MouseCursor::NoDrop => baseview::MouseCursor::PtrNotAllowed,
+            i_slint_core::items::MouseCursor::NotAllowed => baseview::MouseCursor::NotAllowed,
+            i_slint_core::items::MouseCursor::Grab => baseview::MouseCursor::Hand,
+            i_slint_core::items::MouseCursor::Grabbing => baseview::MouseCursor::HandGrabbing,
+            i_slint_core::items::MouseCursor::ColResize => baseview::MouseCursor::ColResize,
+            i_slint_core::items::MouseCursor::RowResize => baseview::MouseCursor::RowResize,
+            i_slint_core::items::MouseCursor::NResize => baseview::MouseCursor::NResize,
+            i_slint_core::items::MouseCursor::EResize => baseview::MouseCursor::EResize,
+            i_slint_core::items::MouseCursor::SResize => baseview::MouseCursor::SResize,
+            i_slint_core::items::MouseCursor::WResize => baseview::MouseCursor::WResize,
+            i_slint_core::items::MouseCursor::NeResize => baseview::MouseCursor::NeResize,
+            i_slint_core::items::MouseCursor::NwResize => baseview::MouseCursor::NwResize,
+            i_slint_core::items::MouseCursor::SeResize => baseview::MouseCursor::SeResize,
+            i_slint_core::items::MouseCursor::SwResize => baseview::MouseCursor::SwResize,
+            i_slint_core::items::MouseCursor::EwResize => baseview::MouseCursor::EwResize,
+            i_slint_core::items::MouseCursor::NsResize => baseview::MouseCursor::NsResize,
+            i_slint_core::items::MouseCursor::NeswResize => baseview::MouseCursor::NeswResize,
+            i_slint_core::items::MouseCursor::NwseResize => baseview::MouseCursor::NwseResize,
+            _ => baseview::MouseCursor::Default,
         }
     }
 
@@ -303,17 +341,31 @@ impl SbWindowAdapter {
         }
     }
 
-    fn handle_pending_user_scale_factor(&self, window: &mut baseview::Window) {
-        let size = {
-            let inner = self.inner.borrow();
-            inner.pending_user_scale_factor.map(|scale_factor| {
-                let size = inner.size.to_physical(scale_factor);
-                baseview::Size {
-                    width: size.width as _,
-                    height: size.height as _,
-                }
-            })
+    fn process_messages(&self, window: &mut baseview::Window) {
+        let (cursor, focus, size) = {
+            let mut inner = self.inner.borrow_mut();
+
+            (
+                inner.cursor.take(),
+                inner.contains_remove_flags(Flags::FOCUS),
+                inner.pending_user_scale_factor.map(|scale_factor| {
+                    let size = inner.size.to_physical(scale_factor);
+                    baseview::Size {
+                        width: size.width as _,
+                        height: size.height as _,
+                    }
+                }),
+            )
         };
+
+        if let Some(cursor) = cursor {
+            window.set_mouse_cursor(Self::convert_cursor(cursor));
+        }
+
+        if focus {
+            window.focus();
+        }
+
         if let Some(size) = size {
             window.resize(size);
         }
@@ -369,6 +421,24 @@ impl WindowAdapter for SbWindowAdapter {
     fn renderer(&self) -> &dyn Renderer {
         self.renderer_adapter.renderer()
     }
+
+    fn internal(&self, _: InternalToken) -> Option<&dyn WindowAdapterInternal> {
+        Some(self)
+    }
+}
+
+// TODO: impl complete trait.
+impl WindowAdapterInternal for SbWindowAdapter {
+    fn set_mouse_cursor(&self, cursor: i_slint_core::items::MouseCursor) {
+        self.inner.borrow_mut().cursor.replace(cursor);
+    }
+
+    fn input_method_request(&self, request: InputMethodRequest) {
+        match request {
+            InputMethodRequest::Enable(_) => self.inner.borrow_mut().flags.insert(Flags::FOCUS),
+            _ => (),
+        }
+    }
 }
 
 // ---------- SbWindowAdapter ---------- //
@@ -379,6 +449,7 @@ struct SbWindowAdapterInner {
     user_scale_factor: f64,
     mouse_pos: LogicalPosition,
 
+    cursor: Option<i_slint_core::items::MouseCursor>,
     flags: Flags,
     pending_user_scale_factor: Option<f64>,
 }
@@ -400,8 +471,9 @@ impl SbWindowAdapterInner {
 bitflags! {
     #[derive(Clone, Copy)]
     struct Flags: u8 {
-        const MOUSE_DOWN = 1 << 0;
-        const PENDING_MOUSE_EXIT = 1 << 1;
-        const REDRAW = 1 << 2;
+        const FOCUS = 1 << 0;
+        const MOUSE_DOWN = 1 << 1;
+        const PENDING_MOUSE_EXIT = 1 << 2;
+        const REDRAW = 1 << 3;
     }
 }
