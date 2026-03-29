@@ -1,18 +1,18 @@
 use bytemuck::{AnyBitPattern, NoUninit, Zeroable, cast_slice_mut};
 use i_slint_core::{renderer::Renderer, window::WindowAdapter};
 use i_slint_renderer_software::{PremultipliedRgbaColor, SoftwareRenderer, TargetPixel};
-use std::{cell::RefCell, num::NonZeroU32, ops::DerefMut, sync::Arc};
 use softbuffer::{Context, Surface};
+use std::{cell::RefCell, num::NonZeroU32, ops::DerefMut};
 
-use super::{SbDisplayWindowHandle, SbRendererAdapter};
+use super::SbRendererAdapter;
 
 // ---------- SbSoftwareRendererAdapter ---------- //
 
 #[derive(Default)]
 pub(super) struct SbSoftwareRendererAdapter {
     renderer: SoftwareRenderer,
-    context: RefCell<Option<Context<Arc<SbDisplayWindowHandle>>>>,
-    surface: RefCell<Option<Surface<Arc<SbDisplayWindowHandle>, Arc<SbDisplayWindowHandle>>>>,
+    context: RefCell<Option<Context<baseview::Handle>>>,
+    surface: RefCell<Option<Surface<baseview::Handle, baseview::Handle>>>,
 }
 
 impl SbRendererAdapter for SbSoftwareRendererAdapter {
@@ -21,10 +21,10 @@ impl SbRendererAdapter for SbSoftwareRendererAdapter {
         window: &baseview::Window,
         _window_adapter: &dyn WindowAdapter,
     ) -> Result<(), String> {
-        let window_wrapper = Arc::new(SbDisplayWindowHandle::new(window));
-        let context = Context::new(window_wrapper.clone())
-            .map_err(|err| format!("Software context error: {err}"))?;
-        let surface = Surface::new(&context, window_wrapper)
+        let handle = window.handle();
+        let context =
+            Context::new(handle).map_err(|err| format!("Software context error: {err}"))?;
+        let surface = Surface::new(&context, handle)
             .map_err(|err| format!("Software surface error: {err}"))?;
         self.context.borrow_mut().replace(context);
         self.surface.borrow_mut().replace(surface);

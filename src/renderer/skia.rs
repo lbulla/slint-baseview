@@ -1,8 +1,9 @@
 use i_slint_core::{renderer::Renderer, window::WindowAdapter};
 use i_slint_renderer_skia::{SkiaRenderer, SkiaSharedContext};
+use raw_window_handle::{HandleError, HasDisplayHandle, HasWindowHandle};
 use std::sync::Arc;
 
-use super::{SbDisplayWindowHandle, SbRendererAdapter};
+use super::SbRendererAdapter;
 
 // ---------- SbSkiaRendererAdapter ---------- //
 
@@ -24,7 +25,7 @@ impl SbRendererAdapter for SbSkiaRendererAdapter {
         window: &baseview::Window,
         window_adapter: &dyn WindowAdapter,
     ) -> Result<(), String> {
-        let handle = Arc::new(SbDisplayWindowHandle::new(window));
+        let handle = Arc::new(HandleWrapper(window.handle()));
         self.renderer
             .set_window_handle(handle.clone(), handle, window_adapter.size(), None)
             .map_err(|err| format!("Skia set window error: {err}"))
@@ -40,3 +41,22 @@ impl SbRendererAdapter for SbSkiaRendererAdapter {
         &self.renderer
     }
 }
+
+// ---------- HandleWrapper ---------- //
+
+pub(super) struct HandleWrapper(baseview::Handle);
+
+impl HasDisplayHandle for HandleWrapper {
+    fn display_handle(&self) -> Result<raw_window_handle::DisplayHandle<'_>, HandleError> {
+        self.0.display_handle()
+    }
+}
+
+impl HasWindowHandle for HandleWrapper {
+    fn window_handle(&self) -> Result<raw_window_handle::WindowHandle<'_>, HandleError> {
+        self.0.window_handle()
+    }
+}
+
+unsafe impl Send for HandleWrapper {}
+unsafe impl Sync for HandleWrapper {}

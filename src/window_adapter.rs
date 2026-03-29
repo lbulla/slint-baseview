@@ -11,6 +11,7 @@ use i_slint_core::{
     window::{InputMethodRequest, WindowAdapter, WindowAdapterInternal},
 };
 use keyboard_types::{KeyState, Modifiers};
+use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use std::{cell::RefCell, rc::Rc, str::FromStr};
 use vtable::VRc;
 
@@ -26,8 +27,7 @@ pub struct SbWindowAdapter {
     inner: RefCell<SbWindowAdapterInner>,
     renderer_adapter: Box<dyn SbRendererAdapter>,
     window: Window,
-    window_handle: raw_window_handle::RawWindowHandle,
-    display_handle: raw_window_handle::RawDisplayHandle,
+    handle: baseview::Handle,
 }
 
 impl SbWindowAdapter {
@@ -38,8 +38,7 @@ impl SbWindowAdapter {
         system_scale_factor: Option<f64>,
         user_scale_factor: f64,
         renderer_type: SbRendererType,
-        window_handle: raw_window_handle::RawWindowHandle,
-        display_handle: raw_window_handle::RawDisplayHandle,
+        handle: baseview::Handle,
     ) -> Rc<Self> {
         Rc::new_cyclic(|this| {
             let window = Window::new(this.clone() as _);
@@ -64,8 +63,7 @@ impl SbWindowAdapter {
                 }),
                 renderer_adapter: renderer_type.create_adapter(),
                 window,
-                window_handle,
-                display_handle,
+                handle,
             }
         })
     }
@@ -349,8 +347,6 @@ impl SbWindowAdapter {
             "\u{F72F}"
         } else if modifier == Modifiers::SHIFT {
             "\u{0010}"
-        } else if modifier == Modifiers::SUPER {
-            "\u{0017}"
         } else {
             ""
         }
@@ -418,8 +414,6 @@ impl SbWindowAdapter {
             Modifiers::SHIFT,
             Modifiers::SYMBOL,
             Modifiers::SYMBOL_LOCK,
-            Modifiers::HYPER,
-            Modifiers::SUPER,
         ] {
             if !modifiers.contains(modifier) {
                 continue;
@@ -462,21 +456,13 @@ impl WindowAdapter for SbWindowAdapter {
     fn window_handle_06(
         &self,
     ) -> Result<raw_window_handle::WindowHandle<'_>, raw_window_handle::HandleError> {
-        unsafe {
-            Ok(raw_window_handle::WindowHandle::borrow_raw(
-                self.window_handle,
-            ))
-        }
+        self.handle.window_handle()
     }
 
     fn display_handle_06(
         &self,
     ) -> Result<raw_window_handle::DisplayHandle<'_>, raw_window_handle::HandleError> {
-        unsafe {
-            Ok(raw_window_handle::DisplayHandle::borrow_raw(
-                self.display_handle,
-            ))
-        }
+        self.handle.display_handle()
     }
 }
 
@@ -518,7 +504,7 @@ impl WindowAdapterInternal for SbWindowAdapter {
         drop(inner.muda_context.take());
         inner.muda_context = MudaAdapter::show_context_menu(
             context_menu_item,
-            self.window_handle,
+            self.window_handle_06().unwrap().as_raw(),
             position,
             inner.user_scale_factor,
         );
